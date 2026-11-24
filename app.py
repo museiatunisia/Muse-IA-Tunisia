@@ -80,7 +80,7 @@ def ask_muse(message, history):
             data = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         body = e.read().decode()
-      raise RuntimeError(f"Erreur Muse API ({e.code}) : {body[:500]}")
+        raise RuntimeError(f"Erreur Muse API ({e.code}) : {body[:500]}")
     text = data.get("output_text") or ""
     if not text:
         for item in data.get("output", []):
