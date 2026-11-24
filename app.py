@@ -147,19 +147,19 @@ def log_lead(contact, canal, message, reply):
 def handle_text(contact, canal, text):
     history = HISTORY.setdefault((canal, contact), [])
     reply = ask_muse(text, history)
-if canal == "Messenger":
-    print(f"MUSE OK reply_len={len(reply)}", flush=True)
+    if canal == "Messenger":
+        print(f"MUSE OK reply_len={len(reply)}", flush=True)
     history.append({"role": "user", "content": text})
     history.append({"role": "assistant", "content": reply})
     if canal == "WhatsApp":
         send_whatsapp(contact, reply)
     else:
         send_messenger(contact, reply)
-    print("SEND OK", flush=True)
-log_lead(contact, canal, text, reply)
+        print("SEND OK", flush=True)
+    log_lead(contact, canal, text, reply)
 
 
-            class Handler(BaseHTTPRequestHandler):
+class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urlparse(self.path)
         q = parse_qs(parsed.query)
@@ -167,18 +167,18 @@ log_lead(contact, canal, text, reply)
         if parsed.path in ("/webhook/whatsapp", "/webhook/messenger"):
             env_key = ("WHATSAPP_VERIFY_TOKEN" if parsed.path.endswith("whatsapp")
                        else "MESSENGER_VERIFY_TOKEN")
-                            mode = q.get("hub.mode", [""])[0]
+                mode = q.get("hub.mode", [""])[0]
                 token_ok = q.get("hub.verify_token", [""])[0] == os.environ.get(env_key, "")
                 print(f"VERIFY {parsed.path} mode={mode} token_ok={token_ok}", flush=True)
-                    if (q.get("hub.mode", [""])[0] == "subscribe"
+                if (q.get("hub.mode", [""])[0] == "subscribe"
                     and q.get("hub.verify_token", [""])[0]
                     == os.environ.get(env_key, "")):
-                        challenge = q.get("hub.challenge", [""])[0]
-                        self.send_response(200)
-                        self.send_header("Content-Type", "text/plain")
-                        self.end_headers()
-                        self.wfile.write(challenge.encode())
-                    return
+                            challenge = q.get("hub.challenge", [""])[0]
+                            self.send_response(200)
+                            self.send_header("Content-Type", "text/plain")
+                            self.end_headers()
+                            self.wfile.write(challenge.encode())
+                        return
             return self._json(403, {"error": "verify_token invalide"})
         if parsed.path == "/health":
             return self._json(200, {"status": "ok", "model": MODEL})
@@ -191,8 +191,8 @@ log_lead(contact, canal, text, reply)
         try:
             length = int(self.headers.get("Content-Length") or 0)
             raw_body = self.rfile.read(length).decode("utf-8") or "{}"
-print(f"WEBHOOK POST {parsed.path} body={raw_body[:500]}", flush=True)
-body = json.loads(raw_body)
+            print(f"WEBHOOK POST {parsed.path} body={raw_body[:500]}", flush=True)
+            body = json.loads(raw_body)
         except Exception:
             return self._json(400, {"error": "Corps JSON invalide"})
         try:
@@ -215,13 +215,13 @@ body = json.loads(raw_body)
                         if "message" not in event or event["message"].get("is_echo"):
                             continue
                         psid = event.get("sender", {}).get("id", "")
-                                              text = event.get("message", {}).get("text", "").strip()
-                      print(f"EVENT sender={psid} text={text[:100]}", flush=True)
+                          text = event.get("message", {}).get("text", "").strip()
+                        print(f"EVENT sender={psid} text={text[:100]}", flush=True)
                         if psid and text:
                             handle_text(psid, "Messenger", text)
         except Exception as e:
             print("Erreur traitement webhook :", e, flush=True)
-          traceback.print_exc()
+            traceback.print_exc()
         return self._json(200, {"status": "ok"})
 
     def _json(self, code, obj):
