@@ -131,7 +131,7 @@ def send_messenger(psid, text):
     except urllib.error.HTTPError as e:
       
         body = e.read().decode()
-      raise RuntimeError(f"Erreur Messenger API ({e.code}) : {body[:500]}")
+        raise RuntimeError(f"Erreur Messenger API ({e.code}) : {body[:500]}")
 def log_lead(contact, canal, message, reply):
     is_new = not os.path.exists(LEADS_FILE)
     with open(LEADS_FILE, "a", newline="", encoding="utf-8") as f:
