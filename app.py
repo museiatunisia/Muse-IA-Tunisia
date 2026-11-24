@@ -24,6 +24,7 @@ Lancer :  python3 app.py
 import csv
 import json
 import os
+import traceback
 import urllib.request
 import urllib.error
 from datetime import datetime
@@ -78,7 +79,8 @@ def ask_muse(message, history):
         with urllib.request.urlopen(req, timeout=60) as resp:
             data = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
-        raise RuntimeError(f"Erreur Muse API ({e.code})")
+        body = e.read().decode()
+      raise RuntimeError(f"Erreur Muse API ({e.code}) : {body[:500]}")
     text = data.get("output_text") or ""
     if not text:
         for item in data.get("output", []):
@@ -122,10 +124,14 @@ def send_messenger(psid, text):
         headers={"Content-Type": "application/json"},
         method="POST",
     )
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        return json.loads(resp.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return json.loads(resp.read().decode("utf-8"))
 
-
+    except urllib.error.HTTPError as e:
+      
+        body = e.read().decode()
+      raise RuntimeError(f"Erreur Messenger API ({e.code}) : {body[:500]}")
 def log_lead(contact, canal, message, reply):
     is_new = not os.path.exists(LEADS_FILE)
     with open(LEADS_FILE, "a", newline="", encoding="utf-8") as f:
@@ -141,13 +147,16 @@ def log_lead(contact, canal, message, reply):
 def handle_text(contact, canal, text):
     history = HISTORY.setdefault((canal, contact), [])
     reply = ask_muse(text, history)
+if canal == "Messenger":
+    print(f"MUSE OK reply_len={len(reply)}", flush=True)
     history.append({"role": "user", "content": text})
     history.append({"role": "assistant", "content": reply})
     if canal == "WhatsApp":
         send_whatsapp(contact, reply)
     else:
         send_messenger(contact, reply)
-    log_lead(contact, canal, text, reply)
+            print("SEND OK", flush=True)
+log_lead(contact, canal, text, reply)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -158,7 +167,10 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path in ("/webhook/whatsapp", "/webhook/messenger"):
             env_key = ("WHATSAPP_VERIFY_TOKEN" if parsed.path.endswith("whatsapp")
                        else "MESSENGER_VERIFY_TOKEN")
-            if (q.get("hub.mode", [""])[0] == "subscribe"
+            mode = q.get("hub.mode", [""])[0]
+token_ok = q.get("hub.verify_token", [""])[0] == os.environ.get(env_key, "")
+print(f"VERIFY {parsed.path} mode={mode} token_ok={token_ok}", flush=True)
+if (q.get("hub.mode", [""])[0] == "subscribe"
                     and q.get("hub.verify_token", [""])[0]
                     == os.environ.get(env_key, "")):
                 challenge = q.get("hub.challenge", [""])[0]
@@ -178,7 +190,9 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(404, {"error": "Route inconnue"})
         try:
             length = int(self.headers.get("Content-Length") or 0)
-            body = json.loads(self.rfile.read(length).decode("utf-8") or "{}")
+            raw_body = self.rfile.read(length).decode("utf-8") or "{}"
+print(f"WEBHOOK POST {parsed.path} body={raw_body[:500]}", flush=True)
+body = json.loads(raw_body)
         except Exception:
             return self._json(400, {"error": "Corps JSON invalide"})
         try:
@@ -201,11 +215,13 @@ class Handler(BaseHTTPRequestHandler):
                         if "message" not in event or event["message"].get("is_echo"):
                             continue
                         psid = event.get("sender", {}).get("id", "")
-                        text = event.get("message", {}).get("text", "").strip()
+                                              text = event.get("message", {}).get("text", "").strip()
+                      print(f"EVENT sender={psid} text={text[:100]}", flush=True)
                         if psid and text:
                             handle_text(psid, "Messenger", text)
         except Exception as e:
-            print("Erreur traitement webhook :", e)
+            print("Erreur traitement webhook :", e, flush=True)
+          traceback.print_exc()
         return self._json(200, {"status": "ok"})
 
     def _json(self, code, obj):
@@ -226,6 +242,6 @@ if __name__ == "__main__":
                            "WHATSAPP_PHONE_NUMBER_ID", "WHATSAPP_VERIFY_TOKEN",
                            "PAGE_ACCESS_TOKEN", "MESSENGER_VERIFY_TOKEN")
                if not os.environ.get(k)]
-    print(f"Employé IA unifié (WhatsApp + Messenger) en ligne : http://localhost:{port}")
-    print("Variables manquantes :", missing if missing else "aucune")
+    print(f"Employé IA unifié (WhatsApp + Messenger) en ligne : http://localhost:{port}", flush=True)
+    print("Variables manquantes :", missing if missing else "aucune", flush=True)
     ThreadingHTTPServer(("0.0.0.0", port), Handler).serve_forever()
