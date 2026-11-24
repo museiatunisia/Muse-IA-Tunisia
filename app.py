@@ -167,18 +167,18 @@ class Handler(BaseHTTPRequestHandler):
         if parsed.path in ("/webhook/whatsapp", "/webhook/messenger"):
             env_key = ("WHATSAPP_VERIFY_TOKEN" if parsed.path.endswith("whatsapp")
                        else "MESSENGER_VERIFY_TOKEN")
-                mode = q.get("hub.mode", [""])[0]
-                token_ok = q.get("hub.verify_token", [""])[0] == os.environ.get(env_key, "")
-                print(f"VERIFY {parsed.path} mode={mode} token_ok={token_ok}", flush=True)
-                if (q.get("hub.mode", [""])[0] == "subscribe"
+            mode = q.get("hub.mode", [""])[0]
+            token_ok = q.get("hub.verify_token", [""])[0] == os.environ.get(env_key, "")
+            print(f"VERIFY {parsed.path} mode={mode} token_ok={token_ok}", flush=True)
+            if (q.get("hub.mode", [""])[0] == "subscribe"
                     and q.get("hub.verify_token", [""])[0]
                     == os.environ.get(env_key, "")):
-                            challenge = q.get("hub.challenge", [""])[0]
-                            self.send_response(200)
-                            self.send_header("Content-Type", "text/plain")
-                            self.end_headers()
-                            self.wfile.write(challenge.encode())
-                        return
+                challenge = q.get("hub.challenge", [""])[0]
+                self.send_response(200)
+                self.send_header("Content-Type", "text/plain")
+                self.end_headers()
+                self.wfile.write(challenge.encode())
+                return
             return self._json(403, {"error": "verify_token invalide"})
         if parsed.path == "/health":
             return self._json(200, {"status": "ok", "model": MODEL})
@@ -215,7 +215,7 @@ class Handler(BaseHTTPRequestHandler):
                         if "message" not in event or event["message"].get("is_echo"):
                             continue
                         psid = event.get("sender", {}).get("id", "")
-                          text = event.get("message", {}).get("text", "").strip()
+                        text = event.get("message", {}).get("text", "").strip()
                         print(f"EVENT sender={psid} text={text[:100]}", flush=True)
                         if psid and text:
                             handle_text(psid, "Messenger", text)
