@@ -145,18 +145,25 @@ def log_lead(contact, canal, message, reply):
 
 
 def handle_text(contact, canal, text):
+    print(f"HANDLE {canal} contact={contact} text={text[:100]}", flush=True)
     history = HISTORY.setdefault((canal, contact), [])
     reply = ask_muse(text, history)
-    if canal == "Messenger":
-        print(f"MUSE OK reply_len={len(reply)}", flush=True)
+    print(f"MUSE OK reply_len={len(reply)}", flush=True)
     history.append({"role": "user", "content": text})
     history.append({"role": "assistant", "content": reply})
-    if canal == "WhatsApp":
-        send_whatsapp(contact, reply)
-    else:
-        send_messenger(contact, reply)
+    try:
+        if canal == "WhatsApp":
+            send_whatsapp(contact, reply)
+        else:
+            send_messenger(contact, reply)
         print("SEND OK", flush=True)
-    log_lead(contact, canal, text, reply)
+    except Exception as e:
+        print(f"SEND FAIL {canal}: {e}", flush=True)
+        raise
+    try:
+        log_lead(contact, canal, text, reply)
+    except Exception as e:
+        print(f"LOG FAIL: {e}", flush=True)
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -191,7 +198,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             length = int(self.headers.get("Content-Length") or 0)
             raw_body = self.rfile.read(length).decode("utf-8") or "{}"
-            print(f"WEBHOOK POST {parsed.path} body={raw_body[:500]}", flush=True)
+            print(f"WEBHOOK POST {parsed.path} body={raw_body[:2000]}", flush=True)
             body = json.loads(raw_body)
         except Exception:
             return self._json(400, {"error": "Corps JSON invalide"})
@@ -209,16 +216,64 @@ class Handler(BaseHTTPRequestHandler):
                             if phone and text:
                                 handle_text(phone, "WhatsApp", text)
             else:
-                # Messenger : entry -> messaging[] -> sender.id + message.text
-                for entry in body.get("entry", []):
-                    for event in entry.get("messaging", []):
-                        if "message" not in event or event["message"].get("is_echo"):
+                # Messenger : entry -> messaging[] (ou standby[]) ->
+                # sender.id + message.text / quick_reply.payload / postback.payload
+                # On logue CHAQUE événement AVANT tout filtre : l'ancien code
+                # faisait "continue" silencieusement (ex. is_echo), donc un
+                # Test event de Meta arrivait mais ne laissait aucune trace.
+                entries = body.get("entry", [])
+                if isinstance(entries, dict):
+                    entries = [entries]
+                found_any = False
+                for entry in entries:
+                    if not isinstance(entry, dict):
+                        continue
+                    events = []
+                    for key in ("messaging", "standby"):
+                        evs = entry.get(key, [])
+                        if isinstance(evs, dict):
+                            evs = [evs]
+                        for ev in evs:
+                            events.append((key, ev))
+                    if not events:
+                        print(f"NO_MESSAGING_EVENTS entry_keys={list(entry.keys())}",
+                              flush=True)
+                    for src, event in events:
+                        found_any = True
+                        if not isinstance(event, dict):
+                            print(f"EVENT non-dict src={src}", flush=True)
                             continue
-                        psid = event.get("sender", {}).get("id", "")
-                        text = event.get("message", {}).get("text", "").strip()
-                        print(f"EVENT sender={psid} text={text[:100]}", flush=True)
-                        if psid and text:
-                            handle_text(psid, "Messenger", text)
+                        msg = event.get("message") or {}
+                        pb = event.get("postback") or {}
+                        print(f"EVENT src={src} keys={list(event.keys())} "
+                              f"sender={event.get('sender', {})} "
+                              f"is_echo={msg.get('is_echo')} "
+                              f"has_message={'message' in event} "
+                              f"has_postback={'postback' in event} "
+                              f"text={(msg.get('text') or '')[:100]}",
+                              flush=True)
+                        if msg.get("is_echo"):
+                            print("SKIP echo (message envoyé par la Page elle-même)",
+                                  flush=True)
+                            continue
+                        psid = (event.get("sender") or {}).get("id", "")
+                        text = (msg.get("text") or "").strip()
+                        if not text and msg.get("quick_reply"):
+                            text = (msg["quick_reply"].get("payload") or "").strip()
+                        if not text and pb.get("payload"):
+                            text = str(pb["payload"]).strip()
+                        if not text and msg.get("attachments"):
+                            text = "Bonjour, j'ai envoyé une image / un sticker."
+                        if not psid:
+                            print("SKIP pas de sender.id", flush=True)
+                            continue
+                        if not text:
+                            print("SKIP pas de texte extractible", flush=True)
+                            continue
+                        handle_text(psid, "Messenger", text)
+                if not found_any:
+                    print(f"NO_EVENTS_AT_ALL body_keys={list(body.keys())}",
+                          flush=True)
         except Exception as e:
             print("Erreur traitement webhook :", e, flush=True)
             traceback.print_exc()
