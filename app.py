@@ -177,7 +177,7 @@ if (q.get("hub.mode", [""])[0] == "subscribe"
                 self.send_response(200)
                 self.send_header("Content-Type", "text/plain")
                 self.end_headers()
-                self.wfile.write(challenge.encode())
+    self.wfile.write(challenge.encode())
                 return
             return self._json(403, {"error": "verify_token invalide"})
         if parsed.path == "/health":
