@@ -235,6 +235,17 @@ class Handler(BaseHTTPRequestHandler):
                             evs = [evs]
                         for ev in evs:
                             events.append((key, ev))
+                    # Les Test events de Meta arrivent sous une autre forme :
+                    # entry[].changes[].value.message (et non messaging[]).
+                    # Sans ça, même le test de Meta ne déclenche aucune réponse.
+                    for change in entry.get("changes", []) or []:
+                        value = (change or {}).get("value") or {}
+                        if value.get("message"):
+                            events.append(("changes", {
+                                "sender": value.get("sender", {}),
+                                "recipient": value.get("recipient", {}),
+                                "message": value.get("message", {}),
+                            }))
                     if not events:
                         print(f"NO_MESSAGING_EVENTS entry_keys={list(entry.keys())}",
                               flush=True)
