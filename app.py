@@ -155,7 +155,7 @@ if canal == "Messenger":
         send_whatsapp(contact, reply)
     else:
         send_messenger(contact, reply)
-            print("SEND OK", flush=True)
+    print("SEND OK", flush=True)
 log_lead(contact, canal, text, reply)
 
 
